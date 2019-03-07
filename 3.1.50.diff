@@ -1,0 +1,53 @@
+diff --git a/target/arm/helper.c b/target/arm/helper.c
+index fbaa801cea..f622add2f1 100644
+--- a/target/arm/helper.c
++++ b/target/arm/helper.c
+@@ -23,6 +23,10 @@
+ 
+ #define ARM_CPU_FREQ 1000000000 /* FIXME: 1 GHz, should be configurable */
+ 
++/* these are not CPUARMState variables, but must be global */
++target_ulong lastaddr = 0;
++int lastexception_index = 0;
++
+ #ifndef CONFIG_USER_ONLY
+ /* Cacheability and shareability attributes for a memory access */
+ typedef struct ARMCacheAttrs {
+@@ -9439,6 +9443,18 @@ static void arm_cpu_do_interrupt_aarch32(CPUState *cs)
+         env->cp15.scr_el3 &= ~SCR_NS;
+     }
+ 
++    if (unlikely(qemu_loglevel_mask(CPU_LOG_INT)) &&
++        (cs->exception_index == EXCP_UDEF ||
++         cs->exception_index == EXCP_PREFETCH_ABORT ||
++         cs->exception_index == EXCP_DATA_ABORT)) {
++            if(lastaddr == env->regs[15] && lastexception_index == cs->exception_index) {
++                cpu_abort(cs, "Exception loop detected for 0x%x, exiting\n", cs->exception_index);
++                exit(1);
++            }
++            lastaddr = env->regs[15];
++            lastexception_index = cs->exception_index;
++    }
++
+     take_aarch32_exception(env, new_mode, mask, offset, addr);
+ }
+ 
+@@ -9552,6 +9568,18 @@ static void arm_cpu_do_interrupt_aarch64(CPUState *cs)
+ 
+     qemu_log_mask(CPU_LOG_INT, "...to EL%d PC 0x%" PRIx64 " PSTATE 0x%x\n",
+                   new_el, env->pc, pstate_read(env));
++
++    if (unlikely(qemu_loglevel_mask(CPU_LOG_INT)) &&
++        (cs->exception_index == EXCP_UDEF ||
++         cs->exception_index == EXCP_PREFETCH_ABORT ||
++         cs->exception_index == EXCP_DATA_ABORT)) {
++            if(lastaddr == env->elr_el[new_el] && lastexception_index == cs->exception_index) {
++                cpu_abort(cs, "Exception loop detected for 0x%x, exiting\n", cs->exception_index);
++                exit(1);
++            }
++            lastaddr = env->elr_el[new_el];
++            lastexception_index = cs->exception_index;
++    }
+ }
+ 
+ static inline bool check_for_semihosting(CPUState *cs)
